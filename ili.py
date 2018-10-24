@@ -146,7 +146,6 @@ class Tabs(QWidget):
         self.cb_transp = QCheckBox("Transponse ion image", self)
         self.logscale = QCheckBox("Logarithmic scale")
         self.logscale.setChecked(True)
-        # self.state.log_scale
 
         # Checkboxes & Buttons handlers
         self.cb_flipud.clicked.connect(self.flipUDsignal)
@@ -193,7 +192,6 @@ class Tabs(QWidget):
         # Copypasted for presentation only
         self.tab1.layout.addWidget(self.logscale)
         self.tab1.layout.addWidget(self.btn_save_configs)
-
 
         self.tab1.layout.addStretch()
         self.tab1.setLayout(self.tab1.layout)
@@ -265,8 +263,10 @@ class Tabs(QWidget):
     def stateC(self):
         if self.componentState.dataUploaded:
             if self.logscale.isChecked():
+                self.componentState.log_scale = True
                 self.logScaleSignal.emit(True)
             else:
+                self.componentState.log_scale = False
                 self.logScaleSignal.emit(False)
 
     def export_configs(self):
@@ -329,6 +329,7 @@ class Controller:
         self.init_currMolVals = copy.deepcopy(self.currMolVals)
         self.rf = int(self.currMolVals.shape[0]**0.5) #rf = reshaping factor
 
+        # Signal handlers
         self.mols.signal.connect(self.updateCanvas)
         self.tabs.flippingSignal.connect(self.flip)
         self.tabs.spotsSizeSignal.connect(self.changeSpotsSize)
@@ -339,11 +340,18 @@ class Controller:
         self.currMol = mol_name
         self.lenXY = int(np.sqrt(np.shape(mols_vals)[0]))
         self.currMolVals = np.reshape(mols_vals, (self.lenXY, self.lenXY)).ravel()
+        self.canvas.norm = matplotlib.colors.LogNorm() if self.componentState.log_scale is True else None
         self.canvas.clean_n_plot(arrX=self.canvas.arrX,
                                  arrY=self.canvas.arrY,
                                  arrZ=self.currMolVals,
                                  s=self.spotVal,
-                                 norm=self.normPlot,
+                                 val13=self.canvas.val13,
+                                 img=self.canvas.img,
+                                 )
+        self.canvas.clean_n_plot(arrX=self.canvas.arrX,
+                                 arrY=self.canvas.arrY,
+                                 arrZ=self.currMolVals,
+                                 s=self.spotVal,
                                  val13=self.canvas.val13,
                                  img=self.canvas.img)
 
@@ -355,11 +363,9 @@ class Controller:
                                      arrY=self.canvas.arrY,
                                      arrZ=self.currMolVals,
                                      s=self.spotVal,
-                                     norm=self.normPlot,
                                      val13=self.canvas.val13,
                                      img=self.canvas.img)
             self.componentState.flip_vertically = not self.componentState.flip_vertically
-            print(vars(self.componentState))
 
         if flipside == 'flipud' and self.componentState.dataUploaded:
             self.currMolVals = np.flipud(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
@@ -367,11 +373,9 @@ class Controller:
                                      arrY=self.canvas.arrY,
                                      arrZ=self.currMolVals,
                                      s=self.spotVal,
-                                     norm=self.normPlot,
                                      val13=self.canvas.val13,
                                      img=self.canvas.img)
             self.componentState.flip_horizontally = not self.componentState.flip_horizontally
-            print(vars(self.componentState))
 
         if flipside == 'flip_clockwise' and self.componentState.dataUploaded:
             # To make this working if the image was flipped it should be unflipped first and returned back to the initial state
@@ -405,7 +409,6 @@ class Controller:
                                      arrY=self.canvas.arrY,
                                      arrZ=self.currMolVals,
                                      s=self.spotVal,
-                                     norm=self.normPlot,
                                      val13=self.canvas.val13,
                                      img=self.canvas.img)
             self.componentState.rotation_deg = 90*k
@@ -417,7 +420,6 @@ class Controller:
                                      arrY=self.canvas.arrY,
                                      arrZ=self.currMolVals,
                                      s=self.spotVal,
-                                     norm=self.normPlot,
                                      val13=self.canvas.val13,
                                      img=self.canvas.img)
             self.componentState.transposed = not self.componentState.transposed
@@ -429,7 +431,6 @@ class Controller:
                                      arrY=self.canvas.arrY,
                                      arrZ=self.currMolVals,
                                      s=self.spotVal,
-                                     norm=self.normPlot,
                                      val13=self.canvas.val13,
                                      img=self.canvas.img)
             self.componentState.rotation_deg = 0
@@ -445,28 +446,24 @@ class Controller:
                                      arrY=self.canvas.arrY,
                                      arrZ=self.currMolVals,
                                      s=self.spotVal,
-                                     norm=self.normPlot,
                                      val13=self.canvas.val13,
                                      img=self.canvas.img)
 
     def enableLogScale(self, val):
+        self.canvas.norm = matplotlib.colors.LogNorm() if self.componentState.log_scale is True else None
         if val and self.componentState.dataUploaded:
-            self.normPlot = matplotlib.colors.LogNorm()
             self.canvas.clean_n_plot(arrX=self.canvas.arrX,
                                      arrY=self.canvas.arrY,
                                      arrZ=self.currMolVals,
                                      s=self.spotVal,
-                                     norm=self.normPlot,
                                      val13=self.canvas.val13,
                                      img=self.canvas.img,
                                      )
         else:
-            self.normPlot = None
             self.canvas.clean_n_plot(arrX=self.canvas.arrX,
                                      arrY=self.canvas.arrY,
                                      arrZ=self.currMolVals,
                                      s=self.spotVal,
-                                     norm=self.normPlot,
                                      val13=self.canvas.val13,
                                      img=self.canvas.img,
                                      )
@@ -501,7 +498,7 @@ class MatplotlibArea(FigureCanvas):
         self.img = None
         self.val13 = None
         self.spotsize = 20
-        self.norm = None
+        self.norm = matplotlib.colors.LogNorm() if self.componentState.log_scale is True else None
         self.fig = plt.figure(figsize=(width, height), dpi=dpi)
         self.limX = ()
         self.limY = ()
@@ -512,10 +509,10 @@ class MatplotlibArea(FigureCanvas):
         self.ax3 = plt.subplot(gs[-1, 1])
         super(MatplotlibArea, self).__init__(self.fig)
 
-    def plot(self, arrX, arrY, arrZ, img, val13, s, norm):
+    def plot(self, arrX, arrY, arrZ, img, val13, s):
         if img is not None:
             self.ax1.imshow(img)
-        self.ax1.scatter(arrX, arrY, s, c=arrZ, norm=norm, edgecolor='')
+        self.ax1.scatter(arrX, arrY, s, c=arrZ, norm=self.norm, edgecolor='')
         self.ax1.callbacks.connect('xlim_changed', self.on_xlims_change)
         self.ax1.callbacks.connect('ylim_changed', self.on_ylims_change)
         rf = int(val13.shape[0]**0.5)
@@ -531,14 +528,14 @@ class MatplotlibArea(FigureCanvas):
     def on_ylims_change(self, axes):
         self.limY = axes.get_ylim()
 
-    def clean_n_plot(self, arrX, arrY, arrZ, img, val13, norm=None, s=None):
+    def clean_n_plot(self, arrX, arrY, arrZ, img, val13, s=None):
         self.ax1.cla()
         self.ax2.cla()
         self.ax3.cla()
         if self.limX and self.limY:
             self.ax1.set_xlim(self.limX)
             self.ax1.set_ylim(self.limY)
-        self.plot(arrX, arrY, arrZ, img, val13, s, norm)
+        self.plot(arrX, arrY, arrZ, img, val13, s)
         # if s is None:
         #     self.plot(arrX, arrY, arrZ, img)
         # else:
