@@ -1,4 +1,4 @@
-import sys, os, json, copy
+import sys, os, json, copy, re
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import *
@@ -18,6 +18,8 @@ class State:
         self.flip_vertically = False
         self.transposed = False
         self.rotation_deg = 0
+        self.history = []
+        self.history_transforms_str = ''
         self.log_scale = True
 
 class LoadFiles(QWidget):
@@ -109,6 +111,7 @@ class Tabs(QWidget):
     spotsSizeSignal = pyqtSignal(int)
     degreeSignal = pyqtSignal(int)
     logScaleSignal = pyqtSignal(bool)
+    exportConfigsSingal = pyqtSignal()
 
     def __init__(self, state, parent):
         super(QWidget, self).__init__(parent)
@@ -209,16 +212,22 @@ class Tabs(QWidget):
         if self.componentState.dataUploaded:
             k = 1
             self.flippingSignal.emit('fliplr', k)
+            self.componentState.history.append('fliplr')
+            print(self.componentState.history)
 
     def flipUDsignal(self):
         if self.componentState.dataUploaded:
             k = 1
             self.flippingSignal.emit('flipud', k)
+            self.componentState.history.append('flipud')
+            print(self.componentState.history)
 
     def transpSignal(self):
         if self.componentState.dataUploaded:
             k = None
             self.flippingSignal.emit('transp', k)
+            self.componentState.history.append('transp')
+            print(self.componentState.history)
 
     def reset_ion_image(self):
         if self.componentState.dataUploaded:
@@ -239,6 +248,8 @@ class Tabs(QWidget):
             self.radio180.setAutoExclusive(True)
             self.radio270.setAutoExclusive(True)
             self.flippingSignal.emit('reset', k)
+            self.componentState.history.append('reset')
+            print(self.componentState.history)
 
     def spotsSize(self, sval):
         if self.componentState.dataUploaded:
@@ -258,6 +269,8 @@ class Tabs(QWidget):
                 k = 3
             if deg != self.deg_old:
                 self.flippingSignal.emit('flip_clockwise', k)
+                self.componentState.history.append('flip_clockwise_{}'.format(k))
+                print(self.componentState.history)
             self.deg_old = deg
 
     def stateC(self):
@@ -270,12 +283,10 @@ class Tabs(QWidget):
                 self.logScaleSignal.emit(False)
 
     def export_configs(self):
-        # if self.componentState['rotation_deg'] > 0:
-        #     k = (self.componentState['rotation_deg']/90) % 4
-        # if self.componentState['flip_horizontally'] is True:
-        #     return json.dumps(self.componentState)
+        self.exportConfigsSingal.emit()
+        print(self.componentState.history_transforms_str)
         with open("AM_analysis_config.txt", "w") as f:
-            f.write(json.dumps(vars(self.componentState)))
+            f.write(json.dumps(self.componentState.history_transforms_str))
 
 class Window(QMainWindow):
 
@@ -289,6 +300,7 @@ class Window(QMainWindow):
         self.central_widget.setLayout(self.layout.lt)
         self.methods = Controller(self.getWidgets, self.state)
         self.initWinUI()
+        np.set_printoptions(threshold=np.nan)
 
     def initWinUI(self):
         self.setWindowTitle('Ablation marks registration analysis')
@@ -322,7 +334,6 @@ class Controller:
         self.data = widgets['data']
         self.mols = widgets['mols']
         self.spotVal = self.canvas.spotsize
-        # if self.state.log_scale is True:
         self.normPlot = self.canvas.norm
         self.currMol = self.mols.currMolecule
         self.currMolVals = self.mols.currMoleculeValues
@@ -334,20 +345,56 @@ class Controller:
         self.tabs.flippingSignal.connect(self.flip)
         self.tabs.spotsSizeSignal.connect(self.changeSpotsSize)
         self.tabs.logScaleSignal.connect(self.enableLogScale)
+        self.tabs.exportConfigsSingal.connect(self.history_of_events)
         self.k = 0
+
+    def history_of_events(self):
+        all_trannsforms_str = '{}'
+        if self.componentState.history:
+            clean_history = []
+            flip_clockwise_pattern = re.compile("^flip_clockwise_[0-3]{1}$")
+            for ind, el in enumerate(self.componentState.history):
+                if not clean_history:
+                    clean_history.append(el)
+                elif flip_clockwise_pattern.match(el) and flip_clockwise_pattern.match(clean_history[-1]):
+                    del clean_history[-1]
+                    clean_history.append(el)
+                elif el == 'fliplr' and clean_history[-1] == 'fliplr':
+                    del clean_history[-1]
+                elif el == 'flipud' and clean_history[-1] == 'flipud':
+                    del clean_history[-1]
+                elif el == 'transp' and clean_history[-1] == 'transp':
+                    del clean_history[-1]
+                elif el == 'reset':
+                    clean_history = []
+                else:
+                    clean_history.append(el)
+            for el in clean_history:
+                if el == 'fliplr':
+                    all_trannsforms_str = "np.fliplr({})".format(all_trannsforms_str)
+                elif el == 'flipud':
+                    all_trannsforms_str = "np.flipud({})".format(all_trannsforms_str)
+                elif el == 'flip_clockwise_1':
+                    all_trannsforms_str = "np.rot90({}, 1)".format(all_trannsforms_str)
+                elif el == 'flip_clockwise_2':
+                    all_trannsforms_str = "np.rot90({}, 2)".format(all_trannsforms_str)
+                elif el == 'flip_clockwise_3':
+                    all_trannsforms_str = "np.rot90({}, 3)".format(all_trannsforms_str)
+                elif el == 'transp':
+                    all_trannsforms_str = "np.transpose({})".format(all_trannsforms_str)
+        print(self.componentState.history_transforms_str)
+        self.componentState.history_transforms_str = all_trannsforms_str + '.ravel()'
 
     def updateCanvas(self, mol_name, mols_vals):
         self.currMol = mol_name
-        self.lenXY = int(np.sqrt(np.shape(mols_vals)[0]))
-        self.currMolVals = np.reshape(mols_vals, (self.lenXY, self.lenXY)).ravel()
+        self.currMolVals = np.reshape(mols_vals, (self.rf, self.rf)).ravel()
+        self.history_of_events()
+        self.init_currMolVals = copy.deepcopy(self.currMolVals)
+        self.flip("reset")
+        exec('self.currMolVals =' +
+             self.componentState.history_transforms_str.format('np.array(self.currMolVals).reshape(self.rf, self.rf)'))
+
         self.canvas.norm = matplotlib.colors.LogNorm() if self.componentState.log_scale is True else None
-        self.canvas.clean_n_plot(arrX=self.canvas.arrX,
-                                 arrY=self.canvas.arrY,
-                                 arrZ=self.currMolVals,
-                                 s=self.spotVal,
-                                 val13=self.canvas.val13,
-                                 img=self.canvas.img,
-                                 )
         self.canvas.clean_n_plot(arrX=self.canvas.arrX,
                                  arrY=self.canvas.arrY,
                                  arrZ=self.currMolVals,
@@ -412,7 +459,6 @@ class Controller:
                                      val13=self.canvas.val13,
                                      img=self.canvas.img)
             self.componentState.rotation_deg = 90*k
-            print(vars(self.componentState))
 
         if flipside == "transp":
             self.currMolVals = np.transpose(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
@@ -423,7 +469,6 @@ class Controller:
                                      val13=self.canvas.val13,
                                      img=self.canvas.img)
             self.componentState.transposed = not self.componentState.transposed
-            print(vars(self.componentState))
 
         if flipside == "reset":
             self.currMolVals = self.init_currMolVals
