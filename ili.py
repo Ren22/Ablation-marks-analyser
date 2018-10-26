@@ -18,8 +18,7 @@ class State:
         self.flip_vertically = False
         self.transposed = False
         self.rotation_deg = 0
-        self.history = []
-        self.history_transforms_str = ''
+        self.history = {}
         self.log_scale = True
 
 class LoadFiles(QWidget):
@@ -121,8 +120,6 @@ class Tabs(QWidget):
 
         self.tabs = QTabWidget()
         self.tab1 = QWidget()
-        self.tab2 = QWidget()
-        self.tab3 = QWidget()
 
         # GroupBox
         self.groupBox1 = QGroupBox("Rotate clockwise: (Rotation is always relative to the initial position)")
@@ -179,54 +176,54 @@ class Tabs(QWidget):
 
         # Add tabs
         self.tabs.addTab(self.tab1, "Transformations")
-        self.tabs.addTab(self.tab3, "Mapping")
+        # self.tabs.addTab(self.tab3, "Mapping")
 
         # Create 1st tab
         self.tab1.layout = QVBoxLayout(self)
+        self.tab1.layout.addWidget(self.groupBox1)
         self.tab1.layout.addWidget(self.flippingLabel)
         self.tab1.layout.addWidget(self.cb_flipud)
         self.tab1.layout.addWidget(self.cb_fliplr)
         self.tab1.layout.addWidget(self.cb_transp)
-        self.tab1.layout.addWidget(self.groupBox1)
         self.tab1.layout.addWidget(self.btn_reset)
-        # Copypasted for presentation only
         self.tab1.layout.addWidget(self.sliderLabel)
         self.tab1.layout.addWidget(self.slider)
-        # Copypasted for presentation only
         self.tab1.layout.addWidget(self.logscale)
         self.tab1.layout.addWidget(self.btn_save_configs)
 
         self.tab1.layout.addStretch()
         self.tab1.setLayout(self.tab1.layout)
 
-        # Create 2nd tab
-        # self.tab2.layout = QVBoxLayout(self)
-        # self.tab2.layout.addWidget(self.slider)
-        # self.tab2.layout.addStretch()
-        # self.tab2.setLayout(self.tab2.layout)
-
         self.layout.addWidget(self.tabs)
-        # self.setLayout(self.layout)
 
     def flipLRsignal(self):
         if self.componentState.dataUploaded:
             k = 1
             self.flippingSignal.emit('fliplr', k)
-            self.componentState.history.append('fliplr')
+            if 'fliplr' in self.componentState.history:
+                self.componentState.history['fliplr'] = not self.componentState.history['fliplr']
+            else:
+                self.componentState.history['fliplr'] = True
             print(self.componentState.history)
 
     def flipUDsignal(self):
         if self.componentState.dataUploaded:
             k = 1
             self.flippingSignal.emit('flipud', k)
-            self.componentState.history.append('flipud')
+            if 'flipud' in self.componentState.history:
+                self.componentState.history['flipud'] = not self.componentState.history['flipud']
+            else:
+                self.componentState.history['flipud'] = True
             print(self.componentState.history)
 
     def transpSignal(self):
         if self.componentState.dataUploaded:
             k = None
             self.flippingSignal.emit('transp', k)
-            self.componentState.history.append('transp')
+            if 'transp' in self.componentState.history:
+                self.componentState.history['transp'] = not self.componentState.history['transp']
+            else:
+                self.componentState.history['transp'] = True
             print(self.componentState.history)
 
     def reset_ion_image(self):
@@ -248,7 +245,7 @@ class Tabs(QWidget):
             self.radio180.setAutoExclusive(True)
             self.radio270.setAutoExclusive(True)
             self.flippingSignal.emit('reset', k)
-            self.componentState.history.append('reset')
+            self.componentState.history.clear()
             print(self.componentState.history)
 
     def spotsSize(self, sval):
@@ -269,8 +266,8 @@ class Tabs(QWidget):
                 k = 3
             if deg != self.deg_old:
                 self.flippingSignal.emit('flip_clockwise', k)
-                self.componentState.history.append('flip_clockwise_{}'.format(k))
-                print(self.componentState.history)
+                self.componentState.history['flip_clockwise'] = k
+            print(self.componentState.history)
             self.deg_old = deg
 
     def stateC(self):
@@ -283,10 +280,9 @@ class Tabs(QWidget):
                 self.logScaleSignal.emit(False)
 
     def export_configs(self):
-        self.exportConfigsSingal.emit()
-        print(self.componentState.history_transforms_str)
+        print(self.componentState.history)
         with open("AM_analysis_config.txt", "w") as f:
-            f.write(json.dumps(self.componentState.history_transforms_str))
+            f.write(json.dumps(self.componentState.history))
 
 class Window(QMainWindow):
 
@@ -345,56 +341,9 @@ class Controller:
         self.tabs.flippingSignal.connect(self.flip)
         self.tabs.spotsSizeSignal.connect(self.changeSpotsSize)
         self.tabs.logScaleSignal.connect(self.enableLogScale)
-        self.tabs.exportConfigsSingal.connect(self.history_of_events)
         self.k = 0
-
-    def history_of_events(self):
-        all_trannsforms_str = '{}'
-        if self.componentState.history:
-            clean_history = []
-            flip_clockwise_pattern = re.compile("^flip_clockwise_[0-3]{1}$")
-            for ind, el in enumerate(self.componentState.history):
-                if not clean_history:
-                    clean_history.append(el)
-                elif flip_clockwise_pattern.match(el) and flip_clockwise_pattern.match(clean_history[-1]):
-                    del clean_history[-1]
-                    clean_history.append(el)
-                elif el == 'fliplr' and clean_history[-1] == 'fliplr':
-                    del clean_history[-1]
-                elif el == 'flipud' and clean_history[-1] == 'flipud':
-                    del clean_history[-1]
-                elif el == 'transp' and clean_history[-1] == 'transp':
-                    del clean_history[-1]
-                elif el == 'reset':
-                    clean_history = []
-                else:
-                    clean_history.append(el)
-            for el in clean_history:
-                if el == 'fliplr':
-                    all_trannsforms_str = "np.fliplr({})".format(all_trannsforms_str)
-                elif el == 'flipud':
-                    all_trannsforms_str = "np.flipud({})".format(all_trannsforms_str)
-                elif el == 'flip_clockwise_1':
-                    all_trannsforms_str = "np.rot90({}, 1)".format(all_trannsforms_str)
-                elif el == 'flip_clockwise_2':
-                    all_trannsforms_str = "np.rot90({}, 2)".format(all_trannsforms_str)
-                elif el == 'flip_clockwise_3':
-                    all_trannsforms_str = "np.rot90({}, 3)".format(all_trannsforms_str)
-                elif el == 'transp':
-                    all_trannsforms_str = "np.transpose({})".format(all_trannsforms_str)
-        print(self.componentState.history_transforms_str)
-        self.componentState.history_transforms_str = all_trannsforms_str + '.ravel()'
-
-    def updateCanvas(self, mol_name, mols_vals):
-        self.currMol = mol_name
-        self.currMolVals = np.reshape(mols_vals, (self.rf, self.rf)).ravel()
-        self.history_of_events()
-        self.init_currMolVals = copy.deepcopy(self.currMolVals)
-        self.flip("reset")
-        exec('self.currMolVals =' +
-             self.componentState.history_transforms_str.format('np.array(self.currMolVals).reshape(self.rf, self.rf)'))
-
-        self.canvas.norm = matplotlib.colors.LogNorm() if self.componentState.log_scale is True else None
+        
+    def redraw(self):
         self.canvas.clean_n_plot(arrX=self.canvas.arrX,
                                  arrY=self.canvas.arrY,
                                  arrZ=self.currMolVals,
@@ -402,84 +351,75 @@ class Controller:
                                  val13=self.canvas.val13,
                                  img=self.canvas.img)
 
-    def flip(self, flipside, k=None):
+    def updateCanvas(self, mol_name, mols_vals):
+        self.currMol = mol_name
+        self.currMolVals = np.reshape(mols_vals, (self.rf, self.rf)).ravel()
+        self.init_currMolVals = copy.deepcopy(self.currMolVals)
+        if 'flip_clockwise' in self.componentState.history:
+            self.flip('flip_clockwise', self.componentState.history['flip_clockwise'], new_mol=True)
+        if 'fliplr' in self.componentState.history and self.componentState.history['fliplr']:
+            self.flip('fliplr')
+        if 'flipud' in self.componentState.history and self.componentState.history['flipud']:
+            self.flip('flipud')
+        if 'transp' in self.componentState.history and self.componentState.history['transp']:
+            self.flip('transp')
+
+        self.canvas.norm = matplotlib.colors.LogNorm() if self.componentState.log_scale is True else None
+        self.redraw()
+
+    def flip(self, flipside, k=None, new_mol=None):
 
         if flipside == 'fliplr' and self.componentState.dataUploaded:
             self.currMolVals = np.fliplr(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
-            self.canvas.clean_n_plot(arrX=self.canvas.arrX,
-                                     arrY=self.canvas.arrY,
-                                     arrZ=self.currMolVals,
-                                     s=self.spotVal,
-                                     val13=self.canvas.val13,
-                                     img=self.canvas.img)
+            self.redraw()
             self.componentState.flip_vertically = not self.componentState.flip_vertically
 
         if flipside == 'flipud' and self.componentState.dataUploaded:
             self.currMolVals = np.flipud(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
-            self.canvas.clean_n_plot(arrX=self.canvas.arrX,
-                                     arrY=self.canvas.arrY,
-                                     arrZ=self.currMolVals,
-                                     s=self.spotVal,
-                                     val13=self.canvas.val13,
-                                     img=self.canvas.img)
+            self.redraw()
             self.componentState.flip_horizontally = not self.componentState.flip_horizontally
 
         if flipside == 'flip_clockwise' and self.componentState.dataUploaded:
             # To make this working if the image was flipped it should be unflipped first and returned back to the initial state
             # After that new manipulations should be applied to the image
             # Below returning back to init state
-            if self.componentState.rotation_deg == 0:
-                self.k = 0
-            elif self.componentState.rotation_deg == 90:
-                self.k = 1
-            elif self.componentState.rotation_deg == 180:
-                self.k = 2
-            elif self.componentState.rotation_deg == 270:
-                self.k = 3
-            if self.componentState.flip_horizontally is True:
-                self.currMolVals = np.flipud(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
-            if self.componentState.flip_vertically is True:
-                self.currMolVals = np.fliplr(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
-            if self.componentState.transposed is True:
-                self.currMolVals = np.transpose(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
-            # The trick below is to rotate image to the initial state (4-k) so the next run it will start from 0deg
-            self.currMolVals = np.rot90(np.array(self.currMolVals).reshape(self.rf, self.rf), 4 - self.k).ravel()
+            if not new_mol:
+                if self.componentState.rotation_deg == 0:
+                    self.k = 0
+                elif self.componentState.rotation_deg == 90:
+                    self.k = 1
+                elif self.componentState.rotation_deg == 180:
+                    self.k = 2
+                elif self.componentState.rotation_deg == 270:
+                    self.k = 3
+                if self.componentState.flip_horizontally is True:
+                    self.currMolVals = np.flipud(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
+                if self.componentState.flip_vertically is True:
+                    self.currMolVals = np.fliplr(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
+                if self.componentState.transposed is True:
+                    self.currMolVals = np.transpose(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
+                # The trick below is to rotate image to the initial state (4-k) so the next run it will start from 0 deg
+                self.currMolVals = np.rot90(np.array(self.currMolVals).reshape(self.rf, self.rf), 4 - self.k).ravel()
             # Apply new manipulations
             self.currMolVals = np.rot90(np.array(self.currMolVals).reshape(self.rf, self.rf), k).ravel()
-            if self.componentState.flip_horizontally is True:
-                self.currMolVals = np.flipud(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
-            if self.componentState.flip_vertically is True:
-                self.currMolVals = np.fliplr(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
-            if self.componentState.transposed is True:
-                self.currMolVals = np.transpose(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
-            self.canvas.clean_n_plot(arrX=self.canvas.arrX,
-                                     arrY=self.canvas.arrY,
-                                     arrZ=self.currMolVals,
-                                     s=self.spotVal,
-                                     val13=self.canvas.val13,
-                                     img=self.canvas.img)
-            self.componentState.rotation_deg = 90*k
+            if not new_mol:
+                if self.componentState.flip_horizontally is True:
+                    self.currMolVals = np.flipud(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
+                if self.componentState.flip_vertically is True:
+                    self.currMolVals = np.fliplr(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
+                if self.componentState.transposed is True:
+                    self.currMolVals = np.transpose(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
+                self.redraw()
+                self.componentState.rotation_deg = 90*k
 
         if flipside == "transp":
             self.currMolVals = np.transpose(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
-            self.canvas.clean_n_plot(arrX=self.canvas.arrX,
-                                     arrY=self.canvas.arrY,
-                                     arrZ=self.currMolVals,
-                                     s=self.spotVal,
-                                     val13=self.canvas.val13,
-                                     img=self.canvas.img)
+            self.redraw()
             self.componentState.transposed = not self.componentState.transposed
 
         if flipside == "reset":
             self.currMolVals = self.init_currMolVals
-            self.canvas.clean_n_plot(arrX=self.canvas.arrX,
-                                     arrY=self.canvas.arrY,
-                                     arrZ=self.currMolVals,
-                                     s=self.spotVal,
-                                     val13=self.canvas.val13,
-                                     img=self.canvas.img)
-            self.componentState.rotation_deg = 0
-            self.k = 0
+            self.redraw()
             self.componentState.flip_horizontally = False
             self.componentState.flip_vertically = False
             self.componentState.transposed = False
@@ -487,31 +427,14 @@ class Controller:
     def changeSpotsSize(self, sval):
         if self.componentState.dataUploaded:
             self.spotVal = sval
-            self.canvas.clean_n_plot(arrX=self.canvas.arrX,
-                                     arrY=self.canvas.arrY,
-                                     arrZ=self.currMolVals,
-                                     s=self.spotVal,
-                                     val13=self.canvas.val13,
-                                     img=self.canvas.img)
+            self.redraw()
 
     def enableLogScale(self, val):
         self.canvas.norm = matplotlib.colors.LogNorm() if self.componentState.log_scale is True else None
         if val and self.componentState.dataUploaded:
-            self.canvas.clean_n_plot(arrX=self.canvas.arrX,
-                                     arrY=self.canvas.arrY,
-                                     arrZ=self.currMolVals,
-                                     s=self.spotVal,
-                                     val13=self.canvas.val13,
-                                     img=self.canvas.img,
-                                     )
+            self.redraw()
         else:
-            self.canvas.clean_n_plot(arrX=self.canvas.arrX,
-                                     arrY=self.canvas.arrY,
-                                     arrZ=self.currMolVals,
-                                     s=self.spotVal,
-                                     val13=self.canvas.val13,
-                                     img=self.canvas.img,
-                                     )
+            self.redraw()
 
 class View:
 
@@ -527,7 +450,6 @@ class View:
         self.layout.setColumnStretch(1, 6)
         self.layout.addWidget(self.navigation, 0, 0)
         self.layout.addWidget(self.canvas, 1, 0)
-        # self.layout.addWidget(self.data, 0, 2)
         self.layout.addWidget(self.tabs, 1, 1)
         self.layout.addWidget(self.mols, 0, 1)
 
@@ -562,10 +484,10 @@ class MatplotlibArea(FigureCanvas):
         self.ax1.callbacks.connect('ylim_changed', self.on_ylims_change)
         rf = int(val13.shape[0]**0.5)
         if val13 is not None:
-            self.ax2.imshow(np.reshape(val13, (rf, rf)).T)
-            # self.ax2.axis('off')
+            self.ax2.imshow(np.reshape(val13, (rf, rf)))
+        # self.ax2.axis('off')
         # self.ax3.axis('off')
-        self.ax3.imshow(np.reshape(arrZ, (rf, rf)))
+        self.ax3.imshow(np.reshape(arrZ, (rf, rf)), norm=self.norm)
 
     def on_xlims_change(self, axes):
         self.limX = axes.get_xlim()
@@ -581,10 +503,6 @@ class MatplotlibArea(FigureCanvas):
             self.ax1.set_xlim(self.limX)
             self.ax1.set_ylim(self.limY)
         self.plot(arrX, arrY, arrZ, img, val13, s)
-        # if s is None:
-        #     self.plot(arrX, arrY, arrZ, img)
-        # else:
-        #
         # use canvas draw rather than artist draw, issue https://sourceforge.net/p/matplotlib/mailman/message/23209300/
         self.ax1.figure.canvas.draw()
         self.ax2.figure.canvas.draw()
