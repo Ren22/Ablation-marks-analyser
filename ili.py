@@ -17,7 +17,7 @@ class State:
         self.flip_horizontally = False
         self.flip_vertically = False
         self.transposed = False
-        self.rotation_deg = 0
+        # self.rotation_deg = 0
         self.history = {}
         self.log_scale = True
 
@@ -383,14 +383,14 @@ class Controller:
             # To make this working if the image was flipped it should be unflipped first and returned back to the initial state
             # After that new manipulations should be applied to the image
             # Below returning back to init state
-            if not new_mol:
-                if self.componentState.rotation_deg == 0:
+            if not new_mol and 'flip_clockwise' in self.componentState.history:
+                if self.componentState.history['flip_clockwise'] == 0:
                     self.k = 0
-                elif self.componentState.rotation_deg == 90:
+                elif self.componentState.history['flip_clockwise'] == 1:
                     self.k = 1
-                elif self.componentState.rotation_deg == 180:
+                elif self.componentState.history['flip_clockwise'] == 2:
                     self.k = 2
-                elif self.componentState.rotation_deg == 270:
+                elif self.componentState.history['flip_clockwise'] == 3:
                     self.k = 3
                 if self.componentState.flip_horizontally is True:
                     self.currMolVals = np.flipud(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
@@ -410,7 +410,8 @@ class Controller:
                 if self.componentState.transposed is True:
                     self.currMolVals = np.transpose(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
                 self.redraw()
-                self.componentState.rotation_deg = 90*k
+                self.componentState.history['flip_clockwise'] = k
+                # self.componentState.rotation_deg = 90*k
 
         if flipside == "transp":
             self.currMolVals = np.transpose(np.array(self.currMolVals).reshape(self.rf, self.rf)).ravel()
