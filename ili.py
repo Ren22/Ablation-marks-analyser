@@ -14,9 +14,6 @@ from matplotlib.gridspec import GridSpec
 class State:
     def __init__(self):
         self.dataUploaded = False
-        self.flip_horizontally = False
-        self.flip_vertically = False
-        self.transposed = False
         self.history = []
         self.log_scale = True
 
@@ -31,17 +28,17 @@ class LoadFiles(QWidget):
         self.mols_list = mols_list
 
         #The code below can be potentially substituted by a button to open the file from another directory
-        filename = '/Users/renat/EMBL/1C_Luca/test/sm_annotation_detections.csv'
+        filename = '/home/renat/EMBL/spaceM_Luca/linux/testSamples/c2_SELECTED/Analysis/ili/sm_annotation_detections.csv'
         df = pd.read_csv(filename, delimiter=',')
         self.mols_df = df.iloc[:, 5:]
         self.mol_names = list(self.mols_df.columns.values)
         self.len_XY = int(np.sqrt(np.shape(df)[0]))
         self.arrX, self.arrY, self.randMol = df.X, df.Y, np.reshape(df[self.mol_names[0]], (self.len_XY, self.len_XY)).ravel()
 
-        imagepath = '/Users/renat/EMBL/1C_Luca/test/FLUO_crop_bin1x1.png'
+        imagepath = '/home/renat/EMBL/spaceM_Luca/linux/testSamples/c2_SELECTED/Analysis/ili/FLUO_crop_bin1x1.png'
         self.imgplt = mpimg.imread(imagepath)
 
-        cellProfImgPath = '/Users/renat/EMBL/1C_Luca/test/marks_flitered_fluo.npy'
+        cellProfImgPath = '/home/renat/EMBL/spaceM_Luca/linux/testSamples/c2_SELECTED/Analysis/scAnalysis/Molecular_features/marks_flitered_fluo.npy'
         self.cellProfImg = np.load(cellProfImgPath)
         self.get13vals = self.cellProfImg[13]
 
@@ -121,17 +118,14 @@ class Tabs(QWidget):
 
         # GroupBox
         self.groupBox1 = QGroupBox("Rotate clockwise: (Rotation is always relative to the initial position)")
-        # self.radio0 = QRadioButton("0 deg")
         self.radio90 = QRadioButton("90 deg")
         self.radio180 = QRadioButton("180 deg")
         self.radio270 = QRadioButton("270 deg")
         self.vbox = QVBoxLayout()
-        # self.vbox.addWidget(self.radio0)
         self.vbox.addWidget(self.radio90)
         self.vbox.addWidget(self.radio180)
         self.vbox.addWidget(self.radio270)
         self.groupBox1.setLayout(self.vbox)
-        # self.radio0.toggled.connect(lambda: self.gbDegSignal(0))
         self.radio90.toggled.connect(lambda: self.gbDegSignal(90))
         self.radio180.toggled.connect(lambda: self.gbDegSignal(180))
         self.radio270.toggled.connect(lambda: self.gbDegSignal(270))
@@ -196,9 +190,9 @@ class Tabs(QWidget):
 
     def flipLRsignal(self):
         if self.componentState.dataUploaded:
-            k = 1
             if 'fliplr' in self.componentState.history:
                 self.componentState.history.remove('fliplr')
+                self.componentState.history = self.remove_double_int(self.componentState.history)
             else:
                 self.componentState.history.append('fliplr')
             self.flippingSignal.emit('fliplr')
@@ -207,9 +201,9 @@ class Tabs(QWidget):
 
     def flipUDsignal(self):
         if self.componentState.dataUploaded:
-            k = 1
             if 'flipud' in self.componentState.history:
                 self.componentState.history.remove('flipud')
+                self.componentState.history = self.remove_double_int(self.componentState.history)
             else:
                 self.componentState.history.append('flipud')
             self.flippingSignal.emit('flipud')
@@ -218,9 +212,9 @@ class Tabs(QWidget):
 
     def transpSignal(self):
         if self.componentState.dataUploaded:
-            k = None
             if 'transp' in self.componentState.history:
                 self.componentState.history.remove('transp')
+                self.componentState.history = self.remove_double_int(self.componentState.history)
             else:
                 self.componentState.history.append('transp')
             self.flippingSignal.emit('transp')
@@ -233,19 +227,16 @@ class Tabs(QWidget):
             self.cb_flipud.setChecked(False)
             self.cb_fliplr.setChecked(False)
             self.cb_transp.setChecked(False)
-            self.radio0.setAutoExclusive(False)
             self.radio90.setAutoExclusive(False)
             self.radio180.setAutoExclusive(False)
             self.radio270.setAutoExclusive(False)
-            self.radio0.setChecked(False)
             self.radio90.setChecked(False)
             self.radio180.setChecked(False)
             self.radio270.setChecked(False)
-            self.radio0.setAutoExclusive(True)
             self.radio90.setAutoExclusive(True)
             self.radio180.setAutoExclusive(True)
             self.radio270.setAutoExclusive(True)
-            self.flippingSignal.emit('reset', k)
+            self.flippingSignal.emit('reset')
             self.componentState.history.clear()
             print(self.componentState.history)
 
@@ -261,11 +252,7 @@ class Tabs(QWidget):
             180: 2,
             270: 3
         }
-        # patt = re.compile('flip_clwise,.{2}?')
-        i = 0
         if self.componentState.dataUploaded:
-            # if patt.match(self.componentState.history[-1]) and \
-            #                 self.componentState.history[-1] == 'flip_clwise,{}'.format(deg_to_k[deg]):
             if self.componentState.history and type(self.componentState.history[-1]) is int:
                 self.componentState.history.pop()
                 self.componentState.history.append(deg_to_k[deg])
@@ -287,6 +274,17 @@ class Tabs(QWidget):
         print(self.componentState.history)
         with open("AM_analysis_config.txt", "w") as f:
             f.write(json.dumps(self.componentState.history))
+
+    @staticmethod
+    def remove_double_int(history):
+        i = 0
+        if len(history) == 2 and type(history[i]) is int and type(history[i + 1]) is int:
+            history.remove(history[i])
+        while len(history) > 2 and i < len(history) - 2:
+            if type(history[i]) is int and type(history[i + 1]) is int:
+                history.remove(history[i])
+            i = i + 1
+        return history
 
 class Window(QMainWindow):
 
@@ -375,19 +373,12 @@ class Controller:
         self.currMol = mol_name
         self.currMolVals = np.reshape(mols_vals, (self.rf, self.rf)).ravel()
         self.init_currMolVals = copy.deepcopy(self.currMolVals)
-        # if 'flip_clockwise' in self.componentState.history:
-        #     self.flip('flip_clockwise', self.componentState.history['flip_clockwise'], new_mol=True)
-        # if 'fliplr' in self.componentState.history and self.componentState.history['fliplr']:
-        #     self.flip('fliplr')
-        # if 'flipud' in self.componentState.history and self.componentState.history['flipud']:
-        #     self.flip('flipud')
-        # if 'transp' in self.componentState.history and self.componentState.history['transp']:
-        #     self.flip('transp')
-
+        if self.componentState.history:
+            self.currMolVals = self.apply_transforms()
         self.canvas.norm = matplotlib.colors.LogNorm() if self.componentState.log_scale is True else None
         self.redraw()
 
-    def flip(self, flipside, k=None, new_mol=None):
+    def flip(self, flipside):
 
         if flipside == 'fliplr':
             self.currMolVals = self.apply_transforms()
@@ -400,7 +391,6 @@ class Controller:
         if flipside == 'flip_clwise':
             self.currMolVals = self.apply_transforms()
             self.redraw()
-            # self.currMolVals = np.rot90(np.array(self.currMolVals).reshape(self.rf, self.rf), k).ravel()
 
         if flipside == 'transp':
             self.currMolVals = self.apply_transforms()
