@@ -33,21 +33,21 @@ class LoadFiles(QWidget):
         self.mols_df = df.iloc[:, 5:]
         self.mol_names = list(self.mols_df.columns.values)
         self.len_XY = int(np.sqrt(np.shape(df)[0]))
-        self.arrX, self.arrY, self.randMol = df.X, df.Y, np.reshape(df[self.mol_names[0]], (self.len_XY, self.len_XY)).ravel()
+        self.arrX, self.arrY, self.randMol = df.X, df.Y, df[self.mol_names[0]]
 
         imagepath = '/home/renat/EMBL/spaceM_Luca/linux/testSamples/c2_SELECTED/Analysis/ili/FLUO_crop_bin1x1.png'
         self.imgplt = mpimg.imread(imagepath)
 
         cellProfImgPath = '/home/renat/EMBL/spaceM_Luca/linux/testSamples/c2_SELECTED/Analysis/scAnalysis/Molecular_features/marks_flitered_fluo.npy'
-        self.cellProfImg = np.load(cellProfImgPath)
-        self.get13vals = self.cellProfImg[13]
+        # self.cellProfImg = np.load(cellProfImgPath)
+        # self.get13vals = self.cellProfImg[13]
 
         self.componentState.dataUploaded = True
         self.mols_list.update_mols_df(self.mol_names[0], self.mols_df)
         self.canvas.arrX, self.canvas.arrY, self.canvas.arrZ = self.arrX, self.arrY, self.randMol
         self.canvas.img = self.imgplt
-        self.canvas.val13 = self.get13vals
-        self.canvas.clean_n_plot(arrX=self.arrX, arrY=self.arrY, arrZ=self.randMol, img=self.imgplt, val13=self.get13vals)
+        # self.canvas.val13 = self.get13vals
+        self.canvas.clean_n_plot(arrX=self.arrX, arrY=self.arrY, arrZ=self.randMol, img=self.imgplt, val13=None)
 
     def __call__(self):
         return {
@@ -461,12 +461,13 @@ class MatplotlibArea(FigureCanvas):
         self.ax1.scatter(arrX, arrY, s, c=arrZ, norm=self.norm, edgecolor='')
         self.ax1.callbacks.connect('xlim_changed', self.on_xlims_change)
         self.ax1.callbacks.connect('ylim_changed', self.on_ylims_change)
-        rf = int(val13.shape[0]**0.5)
         if val13 is not None:
+            rf = int(val13.shape[0] ** 0.5)
             self.ax2.imshow(np.reshape(val13, (rf, rf)))
+            self.ax3.imshow(np.reshape(arrZ, (rf, rf)), norm=self.norm)
+
         # self.ax2.axis('off')
         # self.ax3.axis('off')
-        self.ax3.imshow(np.reshape(arrZ, (rf, rf)), norm=self.norm)
 
     def on_xlims_change(self, axes):
         self.limX = axes.get_xlim()
@@ -474,7 +475,7 @@ class MatplotlibArea(FigureCanvas):
     def on_ylims_change(self, axes):
         self.limY = axes.get_ylim()
 
-    def clean_n_plot(self, arrX, arrY, arrZ, img, val13, s=None):
+    def clean_n_plot(self, arrX, arrY, arrZ, img, val13=None, s=None):
         self.ax1.cla()
         self.ax2.cla()
         self.ax3.cla()
