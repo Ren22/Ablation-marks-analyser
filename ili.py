@@ -10,6 +10,9 @@ import matplotlib.image as mpimg
 import numpy as np
 import matplotlib.colors
 from matplotlib.gridspec import GridSpec
+import matplotlib.image as mpimg
+import argparse
+from PIL import Image
 
 class State:
     def __init__(self):
@@ -21,33 +24,33 @@ class LoadFiles(QWidget):
 
     updateDataSignal = pyqtSignal(dict)
 
-    def __init__(self, state, canvas, mols_list):
+    def __init__(self, state, canvas, mols_list, csv=None, img=None, celldist=None):
         super().__init__()
         self.componentState = state
         self.canvas = canvas
         self.mols_list = mols_list
 
         #The code below can be potentially substituted by a button to open the file from another directory
-        filename = '/home/renat/EMBL/spaceM_Luca/linux/testSamples/c2_SELECTED/Analysis/ili/sm_annotation_detections.csv'
+        filename = csv #'/home/renat/EMBL/spaceM_Luca/linux/testSamples/c2_SELECTED/Analysis/ili/sm_annotation_detections.csv'
         df = pd.read_csv(filename, delimiter=',')
         self.mols_df = df.iloc[:, 5:]
         self.mol_names = list(self.mols_df.columns.values)
         self.len_XY = int(np.sqrt(np.shape(df)[0]))
         self.arrX, self.arrY, self.randMol = df.X, df.Y, df[self.mol_names[0]]
 
-        imagepath = '/home/renat/EMBL/spaceM_Luca/linux/testSamples/c2_SELECTED/Analysis/ili/FLUO_crop_bin1x1.png'
+        imagepath = img #'/home/renat/EMBL/spaceM_Luca/linux/testSamples/c2_SELECTED/Analysis/ili/FLUO_crop_bin1x1.png'
         self.imgplt = mpimg.imread(imagepath)
 
-        cellProfImgPath = '/home/renat/EMBL/spaceM_Luca/linux/testSamples/c2_SELECTED/Analysis/scAnalysis/Molecular_features/marks_flitered_fluo.npy'
-        # self.cellProfImg = np.load(cellProfImgPath)
-        # self.get13vals = self.cellProfImg[13]
+        cellProfImgPath = celldist #'/home/renat/EMBL/spaceM_Luca/linux/testSamples/c2_SELECTED/Analysis/scAnalysis/Molecular_features/marks_flitered_fluo.npy'
+        self.cellProfImg = np.load(cellProfImgPath) if cellProfImgPath else ''
+        self.pmi = self.cellProfImg[0] if self.cellProfImg else []
 
         self.componentState.dataUploaded = True
         self.mols_list.update_mols_df(self.mol_names[0], self.mols_df)
         self.canvas.arrX, self.canvas.arrY, self.canvas.arrZ = self.arrX, self.arrY, self.randMol
         self.canvas.img = self.imgplt
-        # self.canvas.val13 = self.get13vals
-        self.canvas.clean_n_plot(arrX=self.arrX, arrY=self.arrY, arrZ=self.randMol, img=self.imgplt, val13=None)
+        self.canvas.pmi = self.pmi
+        self.canvas.clean_n_plot(arrX=self.arrX, arrY=self.arrY, arrZ=self.randMol, img=self.imgplt, pmi=self.pmi)
 
     def __call__(self):
         return {
@@ -288,9 +291,13 @@ class Tabs(QWidget):
 
 class Window(QMainWindow):
 
-    def __init__(self):
+    def __init__(self, csv=None, img=None, celldist=None):
         super().__init__()
         self.state = State()
+        self.csv = csv
+        self.img = img
+        self.celldist = celldist
+        self.initWinUI()
         self.central_widget = QWidget(self) #central widget needs to be created first
         self.setCentralWidget(self.central_widget)
         self.createOtherWidgets(parent=self.central_widget)
@@ -310,7 +317,7 @@ class Window(QMainWindow):
         self.navigation = NavigationToolbar(self.canvas, parent)
         self.tabs = Tabs(self.state, parent)
         self.mols = Mols_Section(self.state)
-        self.data = LoadFiles(self.state, self.canvas, self.mols)
+        self.data = LoadFiles(self.state, self.canvas, self.mols, self.csv, self.img, self.celldist)
 
     @property
     def getWidgets(self):
@@ -343,7 +350,6 @@ class Controller:
         self.tabs.flippingSignal.connect(self.flip)
         self.tabs.spotsSizeSignal.connect(self.changeSpotsSize)
         self.tabs.logScaleSignal.connect(self.enableLogScale)
-        self.k = 0
 
         # Define transforming functions
         self.trans_func = {}
@@ -366,7 +372,7 @@ class Controller:
                                  arrY=self.canvas.arrY,
                                  arrZ=self.currMolVals,
                                  s=self.spotVal,
-                                 val13=self.canvas.val13,
+                                 pmi=self.canvas.pmi,
                                  img=self.canvas.img)
 
     def updateCanvas(self, mol_name, mols_vals):
@@ -442,7 +448,7 @@ class MatplotlibArea(FigureCanvas):
         self.componentState = state
         self.arrX, self.arrY, self.arrZ = [], [], []
         self.img = None
-        self.val13 = None
+        self.pmi = None
         self.spotsize = 20
         self.norm = matplotlib.colors.LogNorm() if self.componentState.log_scale is True else None
         self.fig = plt.figure(figsize=(width, height), dpi=dpi)
@@ -455,19 +461,19 @@ class MatplotlibArea(FigureCanvas):
         self.ax3 = plt.subplot(gs[-1, 1])
         super(MatplotlibArea, self).__init__(self.fig)
 
-    def plot(self, arrX, arrY, arrZ, img, val13, s):
+    def plot(self, arrX, arrY, arrZ, img, pmi, s):
         if img is not None:
             self.ax1.imshow(img)
         self.ax1.scatter(arrX, arrY, s, c=arrZ, norm=self.norm, edgecolor='')
         self.ax1.callbacks.connect('xlim_changed', self.on_xlims_change)
         self.ax1.callbacks.connect('ylim_changed', self.on_ylims_change)
-        if val13 is not None:
-            rf = int(val13.shape[0] ** 0.5)
-            self.ax2.imshow(np.reshape(val13, (rf, rf)))
-            self.ax3.imshow(np.reshape(arrZ, (rf, rf)), norm=self.norm)
-
+        if len(pmi) > 0 and pmi is not None:
+            rf = int(pmi.shape[0] ** 0.5)
+            self.ax2.imshow(np.reshape(pmi, (rf, rf)))
+            self.ax3.imshow(np.reshape(list(arrZ), (rf, rf)), norm=self.norm)
         # self.ax2.axis('off')
         # self.ax3.axis('off')
+
 
     def on_xlims_change(self, axes):
         self.limX = axes.get_xlim()
@@ -475,20 +481,60 @@ class MatplotlibArea(FigureCanvas):
     def on_ylims_change(self, axes):
         self.limY = axes.get_ylim()
 
-    def clean_n_plot(self, arrX, arrY, arrZ, img, val13=None, s=None):
+    def clean_curr_plot(self):
         self.ax1.cla()
         self.ax2.cla()
         self.ax3.cla()
+
+    def clean_n_plot(self, arrX, arrY, arrZ, img, pmi, s=None):
+        self.clean_curr_plot()
         if self.limX and self.limY:
             self.ax1.set_xlim(self.limX)
             self.ax1.set_ylim(self.limY)
-        self.plot(arrX, arrY, arrZ, img, val13, s)
+        self.plot(arrX, arrY, arrZ, img, pmi, s)
         # use canvas draw rather than artist draw, issue https://sourceforge.net/p/matplotlib/mailman/message/23209300/
         self.ax1.figure.canvas.draw()
         self.ax2.figure.canvas.draw()
         self.ax3.figure.canvas.draw()
 
+    def clean_plot_image(self, img_path):
+        self.clean_curr_plot()
+        self.img = mpimg.pil_to_array(Image.open(img_path))
+        self.ax1.imshow(self.img)
+        self.ax1.figure.canvas.draw()
+
+    def clean_plot_upd_image(self, pc):
+        self.clean_curr_plot()
+        img_new = self.scale(self.img)
+        low_in = np.percentile(img_new, pc)
+        high_in = np.percentile(img_new, 100 - pc)
+        adjusted = self.scale(np.clip(img_new, low_in, high_in)) * 255
+        print(adjusted)
+        self.ax1.imshow(adjusted)
+        self.ax1.figure.canvas.draw()
+
+    def scale(self, input):
+        """Scale array between 0 and 1"""
+        return (input - np.min(input)) / ((np.max(input) - np.min(input)))
+
+
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    main = Window()
-    sys.exit(app.exec_())
+    parser = argparse.ArgumentParser(description="Analyzer tool for ablation marks")
+    print("Analyzer tool for ablation marks")
+    parser.add_argument('-csv', help='path to *.csv file with annotation detections')
+    parser.add_argument('-img', help='path to binned 1x1 image')
+    parser.add_argument('-celldist', help='Cell distribution *.npy file obtained after cell segmentation')
+
+    args = parser.parse_args()
+
+    if args.csv and args.img:
+        app = QApplication(sys.argv)
+        main = Window(csv=args.csv, img=args.img)
+        sys.exit(app.exec_())
+    elif args.csv is None:
+        print('No path to csv file provided')
+    elif args.image is None:
+        print('No path to binned image provided')
+    elif args.celldist is None:
+        print('No path to numpy array with cell distribution provided')
+
